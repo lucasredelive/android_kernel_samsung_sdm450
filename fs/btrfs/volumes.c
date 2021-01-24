@@ -366,7 +366,7 @@ static noinline void run_scheduled_bios(struct btrfs_device *device)
 	 */
 	blk_start_plug(&plug);
 
-	bdi = blk_get_backing_dev_info(device->bdev);
+	bdi = device->bdev->bd_bdi;
 	fs_info = device->dev_root->fs_info;
 	limit = btrfs_async_submit_limit(fs_info);
 	limit = limit * 2 / 3;
@@ -5072,7 +5072,8 @@ static inline int btrfs_chunk_max_errors(struct map_lookup *map)
 
 	if (map->type & (BTRFS_BLOCK_GROUP_RAID1 |
 			 BTRFS_BLOCK_GROUP_RAID10 |
-			 BTRFS_BLOCK_GROUP_RAID5)) {
+			 BTRFS_BLOCK_GROUP_RAID5 |
+			 BTRFS_BLOCK_GROUP_DUP)) {
 		max_errors = 1;
 	} else if (map->type & BTRFS_BLOCK_GROUP_RAID6) {
 		max_errors = 2;

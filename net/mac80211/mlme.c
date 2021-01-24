@@ -1873,16 +1873,6 @@ static bool ieee80211_sta_wmm_params(struct ieee80211_local *local,
 		}
 	}
 
-	/* WMM specification requires all 4 ACIs. */
-	for (ac = 0; ac < IEEE80211_NUM_ACS; ac++) {
-		if (params[ac].cw_min == 0) {
-			sdata_info(sdata,
-				   "AP has invalid WMM params (missing AC %d), using defaults\n",
-				   ac);
-			return false;
-		}
-	}
-
 	for (ac = 0; ac < IEEE80211_NUM_ACS; ac++) {
 		mlme_dbg(sdata,
 			 "WMM AC=%d acm=%d aifs=%d cWmin=%d cWmax=%d txop=%d uapsd=%d, downgraded=%d\n",
@@ -2277,7 +2267,7 @@ void ieee80211_sta_tx_notify(struct ieee80211_sub_if_data *sdata,
 	if (!ieee80211_is_data(hdr->frame_control))
 	    return;
 
-	if (ieee80211_is_any_nullfunc(hdr->frame_control) &&
+	if (ieee80211_is_nullfunc(hdr->frame_control) &&
 	    sdata->u.mgd.probe_send_count > 0) {
 		if (ack)
 			ieee80211_sta_reset_conn_monitor(sdata);
@@ -4574,20 +4564,20 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 		return -EOPNOTSUPP;
 	}
 
-	auth_data = kzalloc(sizeof(*auth_data) + req->sae_data_len +
+	auth_data = kzalloc(sizeof(*auth_data) + req->auth_data_len +
 			    req->ie_len, GFP_KERNEL);
 	if (!auth_data)
 		return -ENOMEM;
 
 	auth_data->bss = req->bss;
 
-	if (req->sae_data_len >= 4) {
-		__le16 *pos = (__le16 *) req->sae_data;
+	if (req->auth_data_len >= 4) {
+		__le16 *pos = (__le16 *)req->auth_data;
 		auth_data->sae_trans = le16_to_cpu(pos[0]);
 		auth_data->sae_status = le16_to_cpu(pos[1]);
-		memcpy(auth_data->data, req->sae_data + 4,
-		       req->sae_data_len - 4);
-		auth_data->data_len += req->sae_data_len - 4;
+		memcpy(auth_data->data, req->auth_data + 4,
+		       req->auth_data_len - 4);
+		auth_data->data_len += req->auth_data_len - 4;
 	}
 
 	if (req->ie && req->ie_len) {

@@ -95,6 +95,35 @@ extern void init_IRQ(void);
 extern void fork_init(void);
 extern void radix_tree_init(void);
 
+#ifdef CONFIG_DEFERRED_INITCALLS
+extern initcall_t __deferred_initcall_start[], __deferred_initcall_end[];
+
+/* call deferred init routines */
+static void __ref do_deferred_initcalls(struct work_struct *work)
+{
+       initcall_t *call;
+       static bool already_run;
+
+       if (already_run) {
+            pr_warn("%s() has already run\n", __func__);
+            return;
+       }
+
+       already_run = true;
+
+       for (call = __deferred_initcall_start;
+              call < __deferred_initcall_end; call++) {
+            do_one_initcall(*call);
+
+       }
+
+       free_initmem();
+}
+
+static DECLARE_WORK(deferred_initcall_work, do_deferred_initcalls);
+#endif
+
+
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
  * where only the boot processor is running with IRQ disabled.  This means
@@ -121,6 +150,7 @@ void (*__initdata late_time_init)(void);
 char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Untouched saved command line (eg. for /proc) */
 char *saved_command_line;
+char *erased_command_line;
 /* Command line for parameter parsing */
 static char *static_command_line;
 /* Command line for per-initcall parameter parsing */
@@ -181,13 +211,21 @@ static bool __init obsolete_checksetup(char *line)
 			} else if (!p->setup_func) {
 				pr_warn("Parameter %s is obsolete, ignored\n",
 					p->str);
-				return true;
-			} else if (p->setup_func(line + n))
-				return true;
+				had_early_param = true;
+				goto fail;
+			} else {
+				set_memsize_reserved_name(p->str);
+				if (p->setup_func(line + n)) {
+					had_early_param = true;
+					goto fail;
+				}
+			}
 		}
 		p++;
 	} while (p < __setup_end);
 
+fail:
+	unset_memsize_reserved_name();
 	return had_early_param;
 }
 
@@ -363,10 +401,13 @@ static void __init setup_command_line(char *command_line)
 {
 	saved_command_line =
 		memblock_virt_alloc(strlen(boot_command_line) + 1, 0);
+	erased_command_line =
+		memblock_virt_alloc(strlen(boot_command_line) + 1, 0);
 	initcall_command_line =
 		memblock_virt_alloc(strlen(boot_command_line) + 1, 0);
 	static_command_line = memblock_virt_alloc(strlen(command_line) + 1, 0);
 	strcpy(saved_command_line, boot_command_line);
+	strcpy(erased_command_line, boot_command_line);
 	strcpy(static_command_line, command_line);
 }
 
@@ -420,11 +461,13 @@ static int __init do_early_param(char *param, char *val,
 		    (strcmp(param, "console") == 0 &&
 		     strcmp(p->str, "earlycon") == 0)
 		) {
+			set_memsize_reserved_name(p->str);
 			if (p->setup_func(val) != 0)
 				pr_warn("Malformed early option '%s'\n", param);
 		}
 	}
 	/* We accept everything at this stage. */
+	unset_memsize_reserved_name();
 	return 0;
 }
 
@@ -464,12 +507,14 @@ void __init __weak thread_stack_cache_init(void)
  */
 static void __init mm_init(void)
 {
+	set_memsize_kernel_type(MEMSIZE_KERNEL_MM_INIT);
 	/*
 	 * page_ext requires contiguous pages,
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
 	page_ext_init_flatmem();
 	mem_init();
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
 	kmem_cache_init();
 	percpu_init_late();
 	pgtable_init();
@@ -482,15 +527,17 @@ asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
 	char *after_dashes;
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+	char *erase_cmd_start, *erase_cmd_end;
+	char *erase_string[] = {"ap_serial=0x", "serialno=", "em.did="};
+	size_t len, value_len;
+	unsigned int i, j;
+#endif
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
-
-	/*
-	 * Set up the the initial canary ASAP:
-	 */
-	boot_init_stack_canary();
 
 	cgroup_init_early();
 
@@ -505,6 +552,10 @@ asmlinkage __visible void __init start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
+	/*
+	 * Set up the the initial canary ASAP:
+	 */
+	boot_init_stack_canary();
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
@@ -515,8 +566,29 @@ asmlinkage __visible void __init start_kernel(void)
 	build_all_zonelists(NULL, NULL);
 	page_alloc_init();
 
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	pr_notice("Kernel command line: %s\n", boot_command_line);
-	/* parameters may set static keys */
+#else
+	for (i = 0; i < ARRAY_SIZE(erase_string); i++) {
+		len = strlen(erase_string[i]);
+		erase_cmd_start = strstr(erased_command_line, erase_string[i]);
+		if (erase_cmd_start == NULL)
+			continue;
+
+		erase_cmd_end = strstr(erase_cmd_start, " ");
+
+		if ( (erase_cmd_end != NULL) && (erase_cmd_start != NULL)
+				&& (erase_cmd_end > erase_cmd_start) ) {
+			value_len = (size_t)(erase_cmd_end - erase_cmd_start) - len;
+
+			for (j = 0; j < value_len; j++) {
+				erase_cmd_start[len + j] = '0';
+			}
+		}
+	}
+	pr_notice("Kernel command line: %s\n", erased_command_line);
+#endif
+   	/* parameters may set static keys */
 	jump_label_init();
 	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
@@ -526,6 +598,7 @@ asmlinkage __visible void __init start_kernel(void)
 	if (!IS_ERR_OR_NULL(after_dashes))
 		parse_args("Setting init args", after_dashes, NULL, 0, -1, -1,
 			   NULL, set_init_arg);
+
 
 	/*
 	 * These use large bootmem allocations and must precede
@@ -710,6 +783,7 @@ static int __init initcall_blacklist(char *str)
 		}
 	} while (str_entry);
 
+	unset_memsize_reserved_name();
 	return 0;
 }
 
@@ -953,7 +1027,9 @@ static int __ref kernel_init(void *unused)
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
+#ifndef CONFIG_DEFERRED_INITCALLS
 	free_initmem();
+#endif
 	mark_readonly();
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();
@@ -962,8 +1038,13 @@ static int __ref kernel_init(void *unused)
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
-		if (!ret)
+        	if (!ret) {
+#ifdef CONFIG_DEFERRED_INITCALLS
+			schedule_work(&deferred_initcall_work);
+#endif
 			return 0;
+		}
+
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
 	}
@@ -976,8 +1057,12 @@ static int __ref kernel_init(void *unused)
 	 */
 	if (execute_command) {
 		ret = run_init_process(execute_command);
-		if (!ret)
+		if (!ret){ 
+#ifdef CONFIG_DEFERRED_INITCALLS
+			schedule_work(&deferred_initcall_work);
+#endif
 			return 0;
+		}
 		panic("Requested init %s failed (error %d).",
 		      execute_command, ret);
 	}

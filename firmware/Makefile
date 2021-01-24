@@ -62,6 +62,17 @@ fw-shipped-$(CONFIG_DRM_RADEON) += radeon/R100_cp.bin radeon/R200_cp.bin \
 				   radeon/RV730_pfp.bin radeon/RV730_me.bin \
 				   radeon/RV710_pfp.bin radeon/RV710_me.bin
 fw-shipped-$(CONFIG_DVB_AV7110) += av7110/bootcode.bin
+#Begin:bug538241,liuchunyang.wt, modify, 2020.3.13, copy TP FW use from P to Q version 
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft3617-txd.img
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft3617-txd.ini
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft3617-ld.img
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft3617-ld.ini
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft3528-txd.img
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft3528-txd.ini
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += focal-ft8201-truly.ini
+#End:bug538241,liuchunyang.wt, modify, 2020.3.13, copy TP FW use from P to Q version 
+
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS_N9) += focal-ft8006p-tianma.ini
 fw-shipped-$(CONFIG_DVB_TTUSB_BUDGET) += ttusb-budget/dspbootcode.bin
 fw-shipped-$(CONFIG_E100) += e100/d101m_ucode.bin e100/d101s_ucode.bin \
 			     e100/d102e_ucode.bin

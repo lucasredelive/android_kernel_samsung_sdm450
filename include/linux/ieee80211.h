@@ -620,15 +620,6 @@ static inline bool ieee80211_is_qos_nullfunc(__le16 fc)
 }
 
 /**
- * ieee80211_is_any_nullfunc - check if frame is regular or QoS nullfunc frame
- * @fc: frame control bytes in little-endian byteorder
- */
-static inline bool ieee80211_is_any_nullfunc(__le16 fc)
-{
-	return (ieee80211_is_nullfunc(fc) || ieee80211_is_qos_nullfunc(fc));
-}
-
-/**
  * ieee80211_is_bufferable_mmpdu - check if frame is bufferable MMPDU
  * @fc: frame control field in little-endian byteorder
  */
@@ -1585,6 +1576,9 @@ struct ieee80211_vht_operation {
 #define WLAN_AUTH_SHARED_KEY 1
 #define WLAN_AUTH_FT 2
 #define WLAN_AUTH_SAE 3
+#define WLAN_AUTH_FILS_SK 4
+#define WLAN_AUTH_FILS_SK_PFS 5
+#define WLAN_AUTH_FILS_PK 6
 #define WLAN_AUTH_LEAP 128
 
 #define WLAN_AUTH_CHALLENGE_LEN 128
@@ -1724,6 +1718,9 @@ enum ieee80211_statuscode {
 	WLAN_STATUS_REJECT_DSE_BAND = 96,
 	WLAN_STATUS_DENIED_WITH_SUGGESTED_BAND_AND_CHANNEL = 99,
 	WLAN_STATUS_DENIED_DUE_TO_SPECTRUM_MANAGEMENT = 103,
+	/* 802.11ai */
+	WLAN_STATUS_FILS_AUTHENTICATION_FAILURE = 108,
+	WLAN_STATUS_UNKNOWN_AUTHENTICATION_SERVER = 109,
 };
 
 
@@ -2082,6 +2079,15 @@ enum ieee80211_key_len {
 #define IEEE80211_GCMP_MIC_LEN		16
 #define IEEE80211_GCMP_PN_LEN		6
 
+#define FILS_NONCE_LEN			16
+#define FILS_MAX_KEK_LEN		64
+
+#define FILS_ERP_MAX_USERNAME_LEN	16
+#define FILS_ERP_MAX_REALM_LEN		253
+#define FILS_ERP_MAX_RRK_LEN		64
+
+#define PMK_MAX_LEN			48
+
 /* Public action codes */
 enum ieee80211_pub_actioncode {
 	WLAN_PUB_ACTION_EXT_CHANSW_ANN = 4,
@@ -2305,31 +2311,37 @@ enum ieee80211_sa_query_action {
 };
 
 
-/* cipher suite selectors */
-#define WLAN_CIPHER_SUITE_USE_GROUP	0x000FAC00
-#define WLAN_CIPHER_SUITE_WEP40		0x000FAC01
-#define WLAN_CIPHER_SUITE_TKIP		0x000FAC02
-/* reserved: 				0x000FAC03 */
-#define WLAN_CIPHER_SUITE_CCMP		0x000FAC04
-#define WLAN_CIPHER_SUITE_WEP104	0x000FAC05
-#define WLAN_CIPHER_SUITE_AES_CMAC	0x000FAC06
-#define WLAN_CIPHER_SUITE_GCMP		0x000FAC08
-#define WLAN_CIPHER_SUITE_GCMP_256	0x000FAC09
-#define WLAN_CIPHER_SUITE_CCMP_256	0x000FAC0A
-#define WLAN_CIPHER_SUITE_BIP_GMAC_128	0x000FAC0B
-#define WLAN_CIPHER_SUITE_BIP_GMAC_256	0x000FAC0C
-#define WLAN_CIPHER_SUITE_BIP_CMAC_256	0x000FAC0D
+#define SUITE(oui, id)	(((oui) << 8) | (id))
 
-#define WLAN_CIPHER_SUITE_SMS4		0x00147201
+/* cipher suite selectors */
+#define WLAN_CIPHER_SUITE_USE_GROUP	SUITE(0x000FAC, 0)
+#define WLAN_CIPHER_SUITE_WEP40		SUITE(0x000FAC, 1)
+#define WLAN_CIPHER_SUITE_TKIP		SUITE(0x000FAC, 2)
+/* reserved:				SUITE(0x000FAC, 3) */
+#define WLAN_CIPHER_SUITE_CCMP		SUITE(0x000FAC, 4)
+#define WLAN_CIPHER_SUITE_WEP104	SUITE(0x000FAC, 5)
+#define WLAN_CIPHER_SUITE_AES_CMAC	SUITE(0x000FAC, 6)
+#define WLAN_CIPHER_SUITE_GCMP		SUITE(0x000FAC, 8)
+#define WLAN_CIPHER_SUITE_GCMP_256	SUITE(0x000FAC, 9)
+#define WLAN_CIPHER_SUITE_CCMP_256	SUITE(0x000FAC, 10)
+#define WLAN_CIPHER_SUITE_BIP_GMAC_128	SUITE(0x000FAC, 11)
+#define WLAN_CIPHER_SUITE_BIP_GMAC_256	SUITE(0x000FAC, 12)
+#define WLAN_CIPHER_SUITE_BIP_CMAC_256	SUITE(0x000FAC, 13)
+
+#define WLAN_CIPHER_SUITE_SMS4		SUITE(0x001472, 1)
 
 /* AKM suite selectors */
-#define WLAN_AKM_SUITE_8021X		0x000FAC01
-#define WLAN_AKM_SUITE_PSK		0x000FAC02
-#define WLAN_AKM_SUITE_8021X_SHA256	0x000FAC05
-#define WLAN_AKM_SUITE_PSK_SHA256	0x000FAC06
-#define WLAN_AKM_SUITE_TDLS		0x000FAC07
-#define WLAN_AKM_SUITE_SAE		0x000FAC08
-#define WLAN_AKM_SUITE_FT_OVER_SAE	0x000FAC09
+#define WLAN_AKM_SUITE_8021X		SUITE(0x000FAC, 1)
+#define WLAN_AKM_SUITE_PSK		SUITE(0x000FAC, 2)
+#define WLAN_AKM_SUITE_8021X_SHA256	SUITE(0x000FAC, 5)
+#define WLAN_AKM_SUITE_PSK_SHA256	SUITE(0x000FAC, 6)
+#define WLAN_AKM_SUITE_TDLS		SUITE(0x000FAC, 7)
+#define WLAN_AKM_SUITE_SAE		SUITE(0x000FAC, 8)
+#define WLAN_AKM_SUITE_FT_OVER_SAE	SUITE(0x000FAC, 9)
+#define WLAN_AKM_SUITE_FILS_SHA256	SUITE(0x000FAC, 14)
+#define WLAN_AKM_SUITE_FILS_SHA384	SUITE(0x000FAC, 15)
+#define WLAN_AKM_SUITE_FT_FILS_SHA256	SUITE(0x000FAC, 16)
+#define WLAN_AKM_SUITE_FT_FILS_SHA384	SUITE(0x000FAC, 17)
 
 #define WLAN_MAX_KEY_LEN		32
 
@@ -2637,59 +2649,6 @@ static inline bool ieee80211_action_contains_tpc(struct sk_buff *skb)
 		return false;
 
 	return true;
-}
-
-struct element {
-	u8 id;
-	u8 datalen;
-	u8 data[];
-} __packed;
-
-/* element iteration helpers */
-#define for_each_element(_elem, _data, _datalen)			\
-	for (_elem = (const struct element *)(_data);			\
-	     (const u8 *)(_data) + (_datalen) - (const u8 *)_elem >=	\
-		(int)sizeof(*_elem) &&					\
-	     (const u8 *)(_data) + (_datalen) - (const u8 *)_elem >=	\
-		(int)sizeof(*_elem) + _elem->datalen;			\
-	     _elem = (const struct element *)(_elem->data + _elem->datalen))
-
-#define for_each_element_id(element, _id, data, datalen)		\
-	for_each_element(element, data, datalen)			\
-		if (element->id == (_id))
-
-#define for_each_element_extid(element, extid, data, datalen)		\
-	for_each_element(element, data, datalen)			\
-		if (element->id == WLAN_EID_EXTENSION &&		\
-		    element->datalen > 0 &&				\
-		    element->data[0] == (extid))
-
-#define for_each_subelement(sub, element)				\
-	for_each_element(sub, (element)->data, (element)->datalen)
-
-#define for_each_subelement_id(sub, id, element)			\
-	for_each_element_id(sub, id, (element)->data, (element)->datalen)
-
-#define for_each_subelement_extid(sub, extid, element)			\
-	for_each_element_extid(sub, extid, (element)->data, (element)->datalen)
-
-/**
- * for_each_element_completed - determine if element parsing consumed all data
- * @element: element pointer after for_each_element() or friends
- * @data: same data pointer as passed to for_each_element() or friends
- * @datalen: same data length as passed to for_each_element() or friends
- *
- * This function returns %true if all the data was parsed or considered
- * while walking the elements. Only use this if your for_each_element()
- * loop cannot be broken out of, otherwise it always returns %false.
- *
- * If some data was malformed, this returns %false since the last parsed
- * element will not fill the whole remaining data.
- */
-static inline bool for_each_element_completed(const struct element *element,
-					      const void *data, size_t datalen)
-{
-	return (const u8 *)element == (const u8 *)data + datalen;
 }
 
 #endif /* LINUX_IEEE80211_H */

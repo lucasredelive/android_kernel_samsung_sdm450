@@ -29,12 +29,13 @@
 #include <linux/jump_label.h>
 #include <linux/kernel.h>
 
+extern const char *machine_name;
+
 /* CPU feature register tracking */
 enum ftr_type {
-	FTR_EXACT,			/* Use a predefined safe value */
-	FTR_LOWER_SAFE,			/* Smaller value is safe */
-	FTR_HIGHER_SAFE,		/* Bigger value is safe */
-	FTR_HIGHER_OR_ZERO_SAFE,	/* Bigger value is safe, but 0 is biggest */
+	FTR_EXACT,	/* Use a predefined safe value */
+	FTR_LOWER_SAFE,	/* Smaller value is safe */
+	FTR_HIGHER_SAFE,/* Bigger value is safe */
 };
 
 #define FTR_STRICT	true	/* SANITY check strict matching required */

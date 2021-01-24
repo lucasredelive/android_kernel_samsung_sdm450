@@ -56,8 +56,15 @@ obj-$(CONFIG_USB_SPEEDTOUCH)	+= atm/
 obj-$(CONFIG_USB_MUSB_HDRC)	+= musb/
 obj-$(CONFIG_USB_CHIPIDEA)	+= chipidea/
 obj-$(CONFIG_USB_RENESAS_USBHS)	+= renesas_usbhs/
+
+#bug433318, zhaobeilong@wt, 20180409, add usb disable node
+obj-$(CONFIG_USB_HOST_NOTIFY)  += notify/
+
 obj-$(CONFIG_USB_GADGET)	+= gadget/
 
 obj-$(CONFIG_USB_COMMON)	+= common/
 
 obj-$(CONFIG_USBIP_CORE)	+= usbip/
+
+obj-$(CONFIG_TYPEC)		+= typec/
+obj-$(CONFIG_USB_PD)		+= pd/

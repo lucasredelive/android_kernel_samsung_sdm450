@@ -496,17 +496,15 @@ EXPORT_SYMBOL(ip_idents_reserve);
 
 void __ip_select_ident(struct net *net, struct iphdr *iph, int segs)
 {
+	static u32 ip_idents_hashrnd __read_mostly;
 	u32 hash, id;
 
-	/* Note the following code is not safe, but this is okay. */
-	if (unlikely(siphash_key_is_zero(&net->ipv4.ip_id_key)))
-		get_random_bytes(&net->ipv4.ip_id_key,
-				 sizeof(net->ipv4.ip_id_key));
+	net_get_random_once(&ip_idents_hashrnd, sizeof(ip_idents_hashrnd));
 
-	hash = siphash_3u32((__force u32)iph->daddr,
+	hash = jhash_3words((__force u32)iph->daddr,
 			    (__force u32)iph->saddr,
-			    iph->protocol,
-			    &net->ipv4.ip_id_key);
+			    iph->protocol ^ net_hash_mix(net),
+			    ip_idents_hashrnd);
 	id = ip_idents_reserve(hash, segs);
 	iph->id = htons(id);
 }
@@ -534,7 +532,7 @@ static void __build_flow_key(const struct net *net, struct flowi4 *fl4,
 }
 
 static void build_skb_flow_key(struct flowi4 *fl4, const struct sk_buff *skb,
-			       const struct sock *sk)
+			       struct sock *sk)
 {
 	const struct net *net = dev_net(skb->dev);
 	const struct iphdr *iph = ip_hdr(skb);
@@ -546,7 +544,7 @@ static void build_skb_flow_key(struct flowi4 *fl4, const struct sk_buff *skb,
 	__build_flow_key(net, fl4, sk, iph, oif, tos, prot, mark, 0);
 }
 
-static void build_sk_flow_key(struct flowi4 *fl4, const struct sock *sk)
+static void build_sk_flow_key(struct flowi4 *fl4, struct sock *sk)
 {
 	const struct inet_sock *inet = inet_sk(sk);
 	const struct ip_options_rcu *inet_opt;
@@ -564,7 +562,7 @@ static void build_sk_flow_key(struct flowi4 *fl4, const struct sock *sk)
 	rcu_read_unlock();
 }
 
-static void ip_rt_build_flow_key(struct flowi4 *fl4, const struct sock *sk,
+static void ip_rt_build_flow_key(struct flowi4 *fl4, struct sock *sk,
 				 const struct sk_buff *skb)
 {
 	if (skb)
